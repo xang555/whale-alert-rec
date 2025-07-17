@@ -1,120 +1,57 @@
 """Pydantic models for the Whale Alert application."""
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Union, Literal
-from enum import Enum
+
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
-
-# Enums for validation
-class TransactionType(str, Enum):
-    TRANSFER = "transfer"
-    DEPOSIT = "deposit"
-    WITHDRAWAL = "withdrawal"
-    SWAP = "swap"
-    OTHER = "other"
-
-
-class Blockchain(str, Enum):
-    BITCOIN = "bitcoin"
-    ETHEREUM = "ethereum"
-    BINANCE = "binance"
-    SOLANA = "solana"
-    POLKADOT = "polkadot"
-    CARDANO = "cardano"
-    XRP = "xrp"
-    OTHER = "other"
 
 
 class WhaleAlertBase(BaseModel):
     """Base model for Whale Alert data."""
     model_config = ConfigDict(
         extra='forbid',
-        str_strip_whitespace=True,
-        str_to_lower=True,
         json_encoders={
             datetime: lambda v: v.isoformat() if v else None
         }
     )
     
-    timestamp: datetime = Field(
+    timestamp: Optional[datetime] = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="The timestamp of the alert"
     )
-    blockchain: str = Field(
-        ...,
-        description="The blockchain where the transaction occurred",
-        min_length=1,
-        max_length=50
+    blockchain: Optional[str] = Field(
+        default=None,
+        description="The blockchain where the transaction occurred"
     )
-    symbol: str = Field(
-        ...,
-        description="The cryptocurrency symbol (e.g., BTC, ETH)",
-        min_length=1,
-        max_length=10,
-        pattern=r'^[A-Z0-9]+$'
+    symbol: Optional[str] = Field(
+        default=None,
+        description="The cryptocurrency symbol (e.g., BTC, ETH)"
     )
-    amount: float = Field(
-        ...,
-        description="The amount of cryptocurrency transferred",
-        gt=0
+    amount: Optional[float] = Field(
+        default=None,
+        description="The amount of cryptocurrency transferred"
     )
-    amount_usd: float = Field(
-        ...,
-        description="The USD value of the transferred amount",
-        gt=0
+    amount_usd: Optional[float] = Field(
+        default=None,
+        description="The USD value of the transferred amount"
     )
     from_address: Optional[str] = Field(
         default=None,
-        description="The source address of the transaction",
-        min_length=20,
-        max_length=100
+        description="The source address of the transaction"
     )
     to_address: Optional[str] = Field(
         default=None,
-        description="The destination address of the transaction",
-        min_length=20,
-        max_length=100
+        description="The destination address of the transaction"
     )
-    transaction_type: TransactionType = Field(
-        default=TransactionType.TRANSFER,
-        description="The type of transaction"
+    transaction_type: Optional[str] = Field(
+        default="transfer",
+        description="The type of transaction (transfer, deposit, withdrawal, swap, mint, other)"
     )
-    hash: str = Field(
-        ...,
-        description="The transaction hash or unique identifier",
-        min_length=10,
-        max_length=100
+    hash: Optional[str] = Field(
+        default=None,
+        description="The transaction hash or unique identifier"
     )
-    
-    @field_validator('symbol')
-    @classmethod
-    def normalize_symbol(cls, v: str) -> str:
-        """Convert symbol to uppercase and remove any whitespace."""
-        return v.strip().upper()
-    
-    @field_validator('blockchain')
-    @classmethod
-    def normalize_blockchain(cls, v: str) -> str:
-        """Convert blockchain name to lowercase and remove any whitespace."""
-        return v.strip().lower()
-    
-    @field_validator('from_address', 'to_address', mode='before')
-    @classmethod
-    def normalize_address(cls, v: Optional[str]) -> Optional[str]:
-        """Normalize blockchain addresses."""
-        if v is None:
-            return None
-        return v.strip()
-    
-    @model_validator(mode='after')
-    def validate_amounts(self) -> 'WhaleAlertBase':
-        """Validate that amount and amount_usd are consistent."""
-        # This is a simple check - in a real app you might want to add more validation
-        # based on current exchange rates
-        if self.amount <= 0 or self.amount_usd <= 0:
-            raise ValueError("Amounts must be positive")
-        return self
 
 
 class WhaleAlertCreate(WhaleAlertBase):
@@ -131,48 +68,35 @@ class WhaleAlertUpdate(BaseModel):
     )
     blockchain: Optional[str] = Field(
         default=None,
-        description="The blockchain where the transaction occurred",
-        min_length=1,
-        max_length=50
+        description="The blockchain where the transaction occurred"
     )
     symbol: Optional[str] = Field(
         default=None,
-        description="The cryptocurrency symbol (e.g., BTC, ETH)",
-        min_length=1,
-        max_length=10,
-        pattern=r'^[A-Z0-9]+$'
+        description="The cryptocurrency symbol (e.g., BTC, ETH)"
     )
     amount: Optional[float] = Field(
         default=None,
-        description="The amount of cryptocurrency transferred",
-        gt=0
+        description="The amount of cryptocurrency transferred"
     )
     amount_usd: Optional[float] = Field(
         default=None,
-        description="The USD value of the transferred amount",
-        gt=0
+        description="The USD value of the transferred amount"
     )
     from_address: Optional[str] = Field(
         default=None,
-        description="The source address of the transaction",
-        min_length=20,
-        max_length=100
+        description="The source address of the transaction"
     )
     to_address: Optional[str] = Field(
         default=None,
-        description="The destination address of the transaction",
-        min_length=20,
-        max_length=100
+        description="The destination address of the transaction"
     )
-    transaction_type: Optional[TransactionType] = Field(
+    transaction_type: Optional[str] = Field(
         default=None,
-        description="The type of transaction"
+        description="The type of transaction (transfer, deposit, withdrawal, swap, mint, other)"
     )
     hash: Optional[str] = Field(
         default=None,
-        description="The transaction hash or unique identifier",
-        min_length=10,
-        max_length=100
+        description="The transaction hash or unique identifier"
     )
 
 

@@ -98,32 +98,52 @@ class WhaleAlertClient:
         Args:
             worker_id: The ID of this worker (for logging)
         """
-        logger.info(f"Starting worker {worker_id}")
-        while self._is_running or not self.message_queue.empty():
-            try:
-                # Get a message from the queue with a timeout
+        worker_name = f"worker-{worker_id}"
+        logger.info(f"{worker_name} started")
+        
+        try:
+            while self._is_running:
                 try:
-                    message = await asyncio.wait_for(
-                        self.message_queue.get(),
-                        timeout=1.0  # Check self._is_running periodically
-                    )
-                except asyncio.TimeoutError:
-                    continue
+                    # Get a message from the queue with a timeout
+                    try:
+                        message = await asyncio.wait_for(
+                            self.message_queue.get(),
+                            timeout=1.0
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                        
+                    # Process the message
+                    try:
+                        await self._process_message(message)
+                    except asyncio.CancelledError:
+                        logger.info(f"{worker_name} was cancelled while processing a message")
+                        raise
+                    except Exception as e:
+                        logger.error(f"{worker_name} error processing message: {e}", exc_info=True)
+                    finally:
+                        # Mark the task as done
+                        self.message_queue.task_done()
+                        
+                except asyncio.CancelledError:
+                    logger.info(f"{worker_name} was cancelled")
+                    raise
                     
-                # Process the message
-                logger.debug(f"Worker {worker_id} processing message")
-                await self._process_message(message)
-                
-                # Mark the task as done
-                self.message_queue.task_done()
-                
-            except asyncio.CancelledError:
-                logger.info(f"Worker {worker_id} cancelled")
-                break
-            except Exception as e:
-                logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
-                
-        logger.info(f"Worker {worker_id} stopped")
+                except Exception as e:
+                    logger.error(f"{worker_name} unexpected error: {e}", exc_info=True)
+                    # Small delay to prevent tight error loops
+                    await asyncio.sleep(1)
+                    
+        except asyncio.CancelledError:
+            logger.info(f"{worker_name} cancellation received")
+            raise
+            
+        except Exception as e:
+            logger.error(f"{worker_name} fatal error: {e}", exc_info=True)
+            raise
+            
+        finally:
+            logger.info(f"{worker_name} stopped")
         
     def _setup_handlers(self) -> None:
         """Set up event handlers for the Telegram client."""
@@ -181,30 +201,48 @@ class WhaleAlertClient:
 
     async def start(self) -> None:
         """Start the Telegram client and worker tasks."""
-        # Initialize LLM parser first
-        if not await self._init_llm_parser():
-            logger.error("Failed to initialize LLM parser")
-            return
-            
-        # Start the Telegram client
-        await self.client.start(phone=settings.PHONE_NUMBER)
-        logger.info("Telegram client started")
-        
-        # Start worker tasks
-        self._is_running = True
-        self.worker_tasks = [
-            asyncio.create_task(self._worker(i))
-            for i in range(self.num_workers)
-        ]
-        
-        logger.info(f"Started {len(self.worker_tasks)} worker tasks")
-        
         try:
-            # Keep the client running until interrupted
-            await self.client.run_until_disconnected()
-        finally:
-            # Clean up on exit
+            # Initialize LLM parser first
+            if not await self._init_llm_parser():
+                logger.error("Failed to initialize LLM parser")
+                return
+                
+            # Start the Telegram client
+            await self.client.start(phone=settings.PHONE_NUMBER)
+            logger.info("Telegram client started")
+            
+            # Start worker tasks
+            self._is_running = True
+            self.worker_tasks = [
+                asyncio.create_task(
+                    self._worker(i),
+                    name=f"worker-{i}"
+                )
+                for i in range(self.num_workers)
+            ]
+            
+            logger.info(f"Started {len(self.worker_tasks)} worker tasks")
+            
+            try:
+                # Keep the client running until interrupted
+                await self.client.run_until_disconnected()
+            except asyncio.CancelledError:
+                logger.info("Client connection was cancelled")
+                raise
+            except Exception as e:
+                logger.error(f"Error in client connection: {e}", exc_info=True)
+                raise
+            finally:
+                # Clean up on exit
+                await self.stop()
+                
+        except asyncio.CancelledError:
+            logger.info("Startup was cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to start client: {e}", exc_info=True)
             await self.stop()
+            raise
 
     async def stop(self) -> None:
         """Stop the Telegram client and worker tasks gracefully."""
@@ -215,17 +253,37 @@ class WhaleAlertClient:
         self._is_running = False
         
         # Cancel all worker tasks
+        tasks_to_cancel = []
         for task in self.worker_tasks:
-            if not task.done():
+            if not task.done() and not task.cancelled():
                 task.cancel()
-                
-        # Wait for all workers to complete
-        if self.worker_tasks:
-            logger.info("Waiting for workers to finish...")
-            await asyncio.wait(self.worker_tasks)
+                tasks_to_cancel.append(task)
+        
+        # Wait for all workers to complete with a timeout
+        if tasks_to_cancel:
+            logger.info(f"Waiting for {len(tasks_to_cancel)} workers to finish...")
+            done, pending = await asyncio.wait(
+                tasks_to_cancel,
+                timeout=5.0,
+                return_when=asyncio.ALL_COMPLETED
+            )
             
+            # Log any pending tasks that didn't complete
+            if pending:
+                logger.warning(f"{len(pending)} tasks did not complete gracefully")
+                for task in pending:
+                    logger.debug(f"Pending task: {task}")
+            
+
         # Disconnect the Telegram client
-        if self.client.is_connected():
-            await self.client.disconnect()
+        try:
+            if self.client and self.client.is_connected():
+                await self.client.disconnect()
+                logger.info("Telegram client disconnected")
+        except Exception as e:
+            logger.error(f"Error disconnecting Telegram client: {e}", exc_info=True)
+        
+        # Clear the worker tasks list
+        self.worker_tasks.clear()
             
         logger.info("Telegram client and workers stopped")
