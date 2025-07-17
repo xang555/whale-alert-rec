@@ -1,23 +1,19 @@
 """Telegram client for the Whale Alert application."""
 
 import asyncio
-import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 from telethon import TelegramClient, events
+from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.types import Message
+from telethon.errors import UserAlreadyParticipantError
 
 from whale_alert.config import settings, logger
 from whale_alert.db.crud import create_whale_alert, get_whale_alert_by_hash
 from whale_alert.db.session import get_db
 from whale_alert.llm import LLMParser
 from whale_alert.schemas import WhaleAlertCreate
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class WhaleAlertClient:
@@ -43,6 +39,19 @@ class WhaleAlertClient:
         )
         self.worker_tasks: list[asyncio.Task] = []
         self._is_running = False
+
+    async def _ensure_channel_joined(self) -> None:
+        """Join the target channel if not already joined."""
+        try:
+            await self.client(JoinChannelRequest(settings.CHANNEL_USERNAME))
+            logger.info(f"Joined channel {settings.CHANNEL_USERNAME}")
+        except UserAlreadyParticipantError:
+            logger.debug(f"Already joined channel {settings.CHANNEL_USERNAME}")
+        except Exception as e:
+            logger.error(
+                f"Failed to join channel {settings.CHANNEL_USERNAME}: {e}",
+                exc_info=True,
+            )
 
     async def _init_llm_parser(self) -> bool:
         """Initialize the LLM parser with configuration from settings."""
@@ -216,6 +225,9 @@ class WhaleAlertClient:
             # Start the Telegram client
             await self.client.start(phone=settings.PHONE_NUMBER)
             logger.info("Telegram client started")
+
+            # Ensure we're joined to the target channel
+            await self._ensure_channel_joined()
 
             # Setup handlers after connection to ensure real-time updates
             self._setup_handlers()

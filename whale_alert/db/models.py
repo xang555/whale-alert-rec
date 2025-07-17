@@ -8,7 +8,6 @@ from sqlalchemy import (
     create_engine,
     func,
     text,
-    inspect,
     PrimaryKeyConstraint,
     BigInteger,
     TIMESTAMP,
