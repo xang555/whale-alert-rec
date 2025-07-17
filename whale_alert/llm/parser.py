@@ -94,7 +94,7 @@ class LLMParser:
                 - Source address (if available that is include Unknown, otherwise null)
                 - Destination address (if available that is include Unknown, otherwise null)
                 - Transaction type (transfer, deposit, withdrawal, etc.)
-                - Transaction hash or unique identifier (required, Please create sha1 hash from transaction details and use it as hash)
+                - Transaction hash or unique identifier (required, Please create hash in hexadecimal from transaction details and use it as hash)
                 
                 Return the data in a valid JSON object that matches this schema:
                 {
