@@ -8,6 +8,7 @@ from typing import Any, Optional, Set
 
 from whale_alert.config import settings, logger
 from whale_alert.telegram.client import WhaleAlertClient
+from whale_alert.db.models import init_db
 
 
 class WhaleAlertApp:
@@ -37,6 +38,9 @@ class WhaleAlertApp:
                 pass
 
         try:
+            # Ensure the database is initialized
+            init_db()
+
             # Initialize the Telegram client
             self.client = WhaleAlertClient()
 

@@ -56,7 +56,7 @@ class WhaleAlert(Base):
 
     __tablename__ = "whale_alerts"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False, primary_key=True)
     hash = Column(String(64), nullable=False, index=True)
     blockchain = Column(String(50), nullable=False)
