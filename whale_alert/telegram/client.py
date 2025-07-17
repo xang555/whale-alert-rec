@@ -63,11 +63,11 @@ class WhaleAlertClient:
                     temperature=settings.LLM_TEMPERATURE,
                 )
                 logger.info(f"Initialized LLM parser with model: {settings.LLM_MODEL}")
-                return True
             except Exception as e:
                 logger.error(f"Failed to initialize LLM parser: {e}")
                 return False
-        return False
+
+        return self.llm_parser is not None
 
     async def _process_message(self, message: Message) -> None:
         """Process a single message from the queue.
@@ -222,8 +222,8 @@ class WhaleAlertClient:
                 logger.error("Failed to initialize LLM parser")
                 return
 
-            # Start the Telegram client
-            await self.client.start(phone=settings.PHONE_NUMBER)
+            # Start the Telegram client using existing session
+            await self.client.start()
             logger.info("Telegram client started")
 
             # Ensure we're joined to the target channel
@@ -246,7 +246,8 @@ class WhaleAlertClient:
                 await self.client.run_until_disconnected()
             except asyncio.CancelledError:
                 logger.info("Client connection was cancelled")
-                raise
+                # Allow graceful shutdown without propagating the cancellation
+                return
             except Exception as e:
                 logger.error(f"Error in client connection: {e}", exc_info=True)
                 raise
@@ -256,7 +257,7 @@ class WhaleAlertClient:
 
         except asyncio.CancelledError:
             logger.info("Startup was cancelled")
-            raise
+            return
         except Exception as e:
             logger.error(f"Failed to start client: {e}", exc_info=True)
             await self.stop()

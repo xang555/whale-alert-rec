@@ -55,7 +55,7 @@ class WhaleAlertApp:
 
         except asyncio.CancelledError:
             logger.info("Startup was cancelled")
-            raise
+            return
         except Exception as e:
             logger.error(f"Application error: {e}", exc_info=True)
             raise
@@ -67,6 +67,8 @@ class WhaleAlertApp:
             if hasattr(self, "_client_task"):
                 try:
                     await self._client_task
+                except asyncio.CancelledError:
+                    logger.info("Client task cancelled during shutdown")
                 except Exception:
                     logger.exception("Client task raised an exception during shutdown")
 
@@ -103,10 +105,11 @@ class WhaleAlertApp:
                 logger.error(f"Error during client shutdown: {e}", exc_info=True)
 
         # Get all tasks except the current one
+        client_task = getattr(self, "_client_task", None)
         tasks = [
             t
             for t in asyncio.all_tasks()
-            if t is not asyncio.current_task() and not t.done()
+            if t is not asyncio.current_task() and t is not client_task and not t.done()
         ]
 
         if tasks:
@@ -176,6 +179,9 @@ def main() -> int:
         return 0
     except KeyboardInterrupt:
         logger.info("Application stopped by user")
+        return 0
+    except asyncio.CancelledError:
+        logger.info("Application cancelled")
         return 0
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
