@@ -156,24 +156,17 @@ def init_db() -> None:
     # Create indexes after hypertable creation
     with engine.begin() as conn:
         try:
-            # Create a unique constraint that includes the partition key
-            conn.execute(
-                text(
-                    """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_whale_alerts_unique_hash 
-                ON public.whale_alerts (timestamp, hash);
-                
-                CREATE INDEX IF NOT EXISTS idx_whale_alerts_hash 
-                ON public.whale_alerts (hash);
-                
-                CREATE INDEX IF NOT EXISTS idx_whale_alerts_timestamp 
-                ON public.whale_alerts (timestamp DESC);
-                
-                CREATE INDEX IF NOT EXISTS idx_whale_alerts_symbol 
-                ON public.whale_alerts (symbol);
-                """
-                )
-            )
+            # Create indexes individually to avoid multi-statement issues
+            index_statements = [
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_whale_alerts_unique_hash ON public.whale_alerts (timestamp, hash)",
+                "CREATE INDEX IF NOT EXISTS idx_whale_alerts_hash ON public.whale_alerts (hash)",
+                "CREATE INDEX IF NOT EXISTS idx_whale_alerts_timestamp ON public.whale_alerts (timestamp DESC)",
+                "CREATE INDEX IF NOT EXISTS idx_whale_alerts_symbol ON public.whale_alerts (symbol)",
+            ]
+
+            for stmt in index_statements:
+                conn.execute(text(stmt))
+
             logger.info("Created indexes on whale_alerts table")
         except Exception as e:
             logger.error(f"Could not create indexes: {e}")

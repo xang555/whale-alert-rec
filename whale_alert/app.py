@@ -8,7 +8,7 @@ from typing import Any, Optional, Set
 
 from whale_alert.config import settings, logger
 from whale_alert.telegram.client import WhaleAlertClient
-from whale_alert.db.models import init_db
+from whale_alert.db.models import init_db, engine
 
 
 class WhaleAlertApp:
@@ -130,6 +130,12 @@ class WhaleAlertApp:
                     logger.error(
                         f"Error waiting for tasks to complete: {e}", exc_info=True
                     )
+
+        # Dispose DB connections
+        try:
+            engine.dispose()
+        except Exception as e:
+            logger.error(f"Error disposing engine: {e}")
 
         logger.info("Application shutdown complete")
 

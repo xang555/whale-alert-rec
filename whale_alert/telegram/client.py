@@ -222,15 +222,21 @@ class WhaleAlertClient:
                 logger.error("Failed to initialize LLM parser")
                 return
 
-            # Start the Telegram client using existing session
-            await self.client.start()
+            # Disable built-in markdown parsing for raw text
+            self.client.parse_mode = None
+
+            # Connect using the existing session
+            await self.client.connect()
+            if not self.client.is_user_authorized():
+                await self.client.start()
+
             logger.info("Telegram client started")
+
+            # Attach handlers before joining to catch early messages
+            self._setup_handlers()
 
             # Ensure we're joined to the target channel
             await self._ensure_channel_joined()
-
-            # Setup handlers after connection to ensure real-time updates
-            self._setup_handlers()
 
             # Start worker tasks
             self._is_running = True
