@@ -43,9 +43,8 @@ class WhaleAlertClient:
         )
         self.worker_tasks: list[asyncio.Task] = []
         self._is_running = False
-        self._setup_handlers()
 
-    async def _init_llm_parser(self) -> None:
+    async def _init_llm_parser(self) -> bool:
         """Initialize the LLM parser with configuration from settings."""
         if not self.llm_parser and settings.OPENAI_API_KEY:
             try:
@@ -149,11 +148,10 @@ class WhaleAlertClient:
             logger.info(f"{worker_name} stopped")
 
     def _setup_handlers(self) -> None:
-        """Set up event handlers for the Telegram client."""
+        """Attach event handlers to the Telegram client."""
 
-        @self.client.on(events.NewMessage(chats=settings.CHANNEL_USERNAME))
         async def handle_whale_alert(event: events.NewMessage.Event) -> None:
-            """Handle incoming Whale Alert messages by adding them to the queue."""
+            """Handle incoming Whale Alert messages by queuing them."""
             try:
                 message = event.message
                 if not message.text:
@@ -162,7 +160,7 @@ class WhaleAlertClient:
 
                 logger.info(f"Queueing new message: {message.text[:100]}...")
 
-                # Add message to the queue
+                # Add message to the queue immediately
                 try:
                     self.message_queue.put_nowait(message)
                     logger.debug(f"Queue size: {self.message_queue.qsize()}")
@@ -171,6 +169,10 @@ class WhaleAlertClient:
 
             except Exception as e:
                 logger.error(f"Error handling message: {e}", exc_info=True)
+
+        self.client.add_event_handler(
+            handle_whale_alert, events.NewMessage(chats=settings.CHANNEL_USERNAME)
+        )
 
     async def _parse_whale_alert(self, message: Message) -> Optional[WhaleAlertCreate]:
         """Parse a Whale Alert message using LLM.
@@ -214,6 +216,9 @@ class WhaleAlertClient:
             # Start the Telegram client
             await self.client.start(phone=settings.PHONE_NUMBER)
             logger.info("Telegram client started")
+
+            # Setup handlers after connection to ensure real-time updates
+            self._setup_handlers()
 
             # Start worker tasks
             self._is_running = True

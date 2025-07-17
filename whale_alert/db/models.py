@@ -158,15 +158,3 @@ def init_db() -> None:
             raise
 
     logger.info("Database initialization complete")
-
-
-def get_db():
-    """Get a database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# Database initialization should be invoked explicitly by the application
