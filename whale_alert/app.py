@@ -132,7 +132,7 @@ class WhaleAlertApp:
 
     def _handle_shutdown(self, signum: int, frame: Any = None) -> None:
         """Handle shutdown signals."""
-        if self._shutting_down:
+        if self._shutdown_event.is_set():
             logger.warning("Shutdown already in progress, ignoring additional signal")
             return
 
@@ -145,6 +145,10 @@ class WhaleAlertApp:
 
         # Trigger shutdown through the main task
         self._shutdown_event.set()
+
+        # Disconnect the Telegram client promptly so run_until_disconnected returns
+        if self.client:
+            asyncio.create_task(self.client.stop())
 
 
 def main() -> int:
