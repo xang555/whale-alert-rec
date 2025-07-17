@@ -14,10 +14,16 @@ from sqlalchemy import (
     Column,
     String,
     Numeric,
-    DateTime
+    DateTime,
 )
 from sqlalchemy.exc import ProgrammingError, OperationalError
-from sqlalchemy.orm import declarative_base, Mapped, mapped_column, sessionmaker, Session
+from sqlalchemy.orm import (
+    declarative_base,
+    Mapped,
+    mapped_column,
+    sessionmaker,
+    Session,
+)
 
 from whale_alert.config import settings
 
@@ -30,22 +36,24 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=300,
     pool_size=10,
-    max_overflow=20
+    max_overflow=20,
 )
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=engine,
     class_=Session,
-    expire_on_commit=False
+    expire_on_commit=False,
 )
 
 # Base model class
 Base = declarative_base()
 
+
 class WhaleAlert(Base):
     """Database model for storing whale alerts."""
-    __tablename__ = 'whale_alerts'
+
+    __tablename__ = "whale_alerts"
 
     id = Column(BigInteger, primary_key=True, autoincrement=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False, primary_key=True)
@@ -63,7 +71,7 @@ class WhaleAlert(Base):
 
     # Create a composite primary key
     __table_args__ = (
-        PrimaryKeyConstraint('timestamp', 'id'),
+        PrimaryKeyConstraint("timestamp", "id"),
         # Remove the postgresql_partition_by as we'll handle hypertable creation separately
     )
 
@@ -95,30 +103,34 @@ def init_db() -> None:
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         try:
             # First, ensure the table is not already a hypertable
-            result = conn.execute(text(
-                """
+            result = conn.execute(
+                text(
+                    """
                 SELECT EXISTS (
                     SELECT 1 FROM _timescaledb_catalog.hypertable 
                     WHERE table_name = 'whale_alerts'
                 )
                 """
-            ))
+                )
+            )
             is_hypertable = result.scalar()
 
             if not is_hypertable:
-                conn.execute(text(
-                    """
+                conn.execute(
+                    text(
+                        """
                     SELECT create_hypertable(
                         'public.whale_alerts',
                         'timestamp',
                         if_not_exists => TRUE
                     )
                     """
-                ))
+                    )
+                )
                 logger.info("Successfully converted whale_alerts to hypertable")
             else:
                 logger.info("whale_alerts is already a hypertable")
-                
+
         except Exception as e:
             logger.error(f"Could not convert whale_alerts to hypertable: {e}")
             raise
@@ -127,8 +139,9 @@ def init_db() -> None:
     with engine.begin() as conn:
         try:
             # Create a unique constraint that includes the partition key
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_whale_alerts_unique_hash 
                 ON public.whale_alerts (timestamp, hash);
                 
@@ -141,7 +154,8 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS idx_whale_alerts_symbol 
                 ON public.whale_alerts (symbol);
                 """
-            ))
+                )
+            )
             logger.info("Created indexes on whale_alerts table")
         except Exception as e:
             logger.error(f"Could not create indexes: {e}")
@@ -159,5 +173,4 @@ def get_db():
         db.close()
 
 
-# Initialize the database when the module is imported
-init_db()
+# Database initialization should be invoked explicitly by the application

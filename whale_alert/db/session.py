@@ -8,12 +8,9 @@ from whale_alert.config import settings
 from whale_alert.db.models import SessionLocal
 
 
+@contextmanager
 def get_db() -> Generator[Session, None, None]:
-    """Get a database session.
-
-    Yields:
-        Session: A database session.
-    """
+    """Get a database session as a context manager."""
     db = SessionLocal()
     try:
         yield db
