@@ -1,4 +1,5 @@
 """Database models for the Whale Alert application."""
+
 import logging
 from datetime import datetime
 from typing import Optional
@@ -90,14 +91,9 @@ def init_db() -> None:
             except (ProgrammingError, OperationalError) as e:
                 logger.warning(f"Could not create timescaledb extension: {e}")
 
-    # Drop existing table if it exists to ensure clean state
-    with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS public.whale_alerts CASCADE"))
-        logger.info("Dropped existing whale_alerts table")
-
-    # Create tables with the correct schema
+    # Create tables if they do not exist
     Base.metadata.create_all(bind=engine)
-    logger.info("Created new whale_alerts table")
+    logger.info("Ensured whale_alerts table exists")
 
     # Convert to hypertable - using a different approach for TimescaleDB
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:

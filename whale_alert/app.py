@@ -1,4 +1,5 @@
 """Main application entry point for Whale Alert."""
+
 import asyncio
 import logging
 import signal
@@ -36,22 +37,34 @@ class WhaleAlertApp:
                 pass
 
         try:
-            # Initialize and start the Telegram client
+            # Initialize the Telegram client
             self.client = WhaleAlertClient()
-            await self.client.start()
 
-            # Keep the application running until shutdown is requested
+            # Start the client in the background so we can wait for signals
+            self._client_task = asyncio.create_task(
+                self.client.start(), name="whale-alert-client"
+            )
+
+            # Wait until a shutdown signal is received
             await self._shutdown_event.wait()
             logger.info("Shutdown event triggered")
 
-            # Perform graceful shutdown
-            await self.shutdown()
-
         except asyncio.CancelledError:
             logger.info("Startup was cancelled")
+            raise
         except Exception as e:
             logger.error(f"Application error: {e}", exc_info=True)
             raise
+        finally:
+            # Perform graceful shutdown
+            await self.shutdown()
+
+            # Ensure the client task finishes
+            if hasattr(self, "_client_task"):
+                try:
+                    await self._client_task
+                except Exception:
+                    logger.exception("Client task raised an exception during shutdown")
 
     async def create_task(self, coro):
         """Create a tracked task."""

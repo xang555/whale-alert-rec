@@ -1,4 +1,5 @@
 """Telegram client for the Whale Alert application."""
+
 import asyncio
 import logging
 from datetime import datetime

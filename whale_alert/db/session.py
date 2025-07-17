@@ -1,4 +1,5 @@
 """Database session management for the Whale Alert application."""
+
 from contextlib import contextmanager
 from typing import Generator
 
