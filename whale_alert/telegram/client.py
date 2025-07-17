@@ -87,15 +87,11 @@ class WhaleAlertClient:
             if not alert:
                 logger.warning("Could not parse whale alert message")
                 return
+            
+            logger.debug(f"Parsed whale alert: {alert}")
 
             # Create a new whale alert in the database
             with get_db() as db:
-                # Check if alert already exists
-                existing_alert = get_whale_alert_by_hash(db, alert.hash)
-                if existing_alert:
-                    logger.info(f"Alert with hash {alert.hash} already exists")
-                    return
-
                 # Create the alert in the database
                 created_alert = create_whale_alert(db, alert)
                 logger.info(f"Created new whale alert: {created_alert.id}")
@@ -196,8 +192,10 @@ class WhaleAlertClient:
             return None
 
         try:
+            # combine message text with message date
+            message_text = f"{message.date} {message.text}"
             # Parse the message using the LLM
-            alert_data = await self.llm_parser.parse_message(message.text)
+            alert_data = await self.llm_parser.parse_message(message_text)
             if not alert_data:
                 logger.warning("LLM parsing returned no data")
                 return None
@@ -227,7 +225,7 @@ class WhaleAlertClient:
 
             # Connect using the existing session
             await self.client.connect()
-            if not self.client.is_user_authorized():
+            if not await self.client.is_user_authorized():
                 await self.client.start()
 
             logger.info("Telegram client started")

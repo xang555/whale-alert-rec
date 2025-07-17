@@ -91,10 +91,10 @@ class LLMParser:
                 - Cryptocurrency symbol (e.g., BTC, ETH, USDT)
                 - Amount of cryptocurrency transferred (as a number)
                 - USD value of the transfer (as a number)
-                - Source address (if available, otherwise null)
-                - Destination address (if available, otherwise null)
+                - Source address (if available that is include Unknown, otherwise null)
+                - Destination address (if available that is include Unknown, otherwise null)
                 - Transaction type (transfer, deposit, withdrawal, etc.)
-                - Transaction hash or unique identifier (required)
+                - Transaction hash or unique identifier (required, Please create sha1 hash from transaction details and use it as hash)
                 
                 Return the data in a valid JSON object that matches this schema:
                 {
