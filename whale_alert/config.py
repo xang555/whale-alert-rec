@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Database configuration
     TIMESCALEDB_URL: PostgresDsn
 
+    # LLM Settings
+    OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
+    LLM_MODEL: str = Field("gpt-4o", env="LLM_MODEL")
+    LLM_TEMPERATURE: float = Field(0.0, env="LLM_TEMPERATURE")
+    
     # Application settings
     SESSION_NAME: str = "whale_alert"
     LOG_LEVEL: str = "INFO"
