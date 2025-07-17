@@ -1,102 +1,463 @@
-"""Database operations for the Whale Alert application."""
-from datetime import datetime
-from typing import List, Optional
+"""Database CRUD operations for the Whale Alert application."""
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Dict, Any, TypeVar, Type, cast
 
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy import select, and_, or_, func, update, delete
+from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.exc import SQLAlchemyError
 
-from whale_alert.db.models import WhaleAlert
-from whale_alert.schemas import WhaleAlertCreate
+from whale_alert.db.models import WhaleAlert, Base
+from whale_alert.schemas import WhaleAlertBase, WhaleAlertInDB, WhaleAlertResponse, WhaleAlertUpdate
+from whale_alert.config import logger
+
+# Type variable for Pydantic models
+ModelType = TypeVar("ModelType", bound=Base)
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
+UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-def create_whale_alert(db: Session, alert: WhaleAlertCreate) -> WhaleAlert:
+async def create_whale_alert(
+    db: Session, 
+    alert: WhaleAlertBase,
+    commit: bool = True
+) -> WhaleAlertResponse:
     """Create a new whale alert in the database.
-
+    
     Args:
-        db: Database session.
-        alert: Whale alert data.
-
+        db: Database session
+        alert: The whale alert data
+        commit: Whether to commit the transaction
+        
     Returns:
-        WhaleAlert: The created whale alert.
+        The created whale alert
+        
+    Raises:
+        sqlalchemy.exc.IntegrityError: If a duplicate alert is inserted
     """
-    db_alert = WhaleAlert(
-        timestamp=alert.timestamp,
-        blockchain=alert.blockchain,
-        symbol=alert.symbol,
-        amount=alert.amount,
-        amount_usd=alert.amount_usd,
-        from_address=alert.from_address,
-        to_address=alert.to_address,
-        transaction_type=alert.transaction_type,
-        hash=alert.hash,
-    )
-    db.add(db_alert)
-    db.commit()
-    db.refresh(db_alert)
-    return db_alert
+    try:
+        # Check if alert with the same hash already exists
+        existing_alert = await get_whale_alert_by_hash(db, alert.hash)
+        if existing_alert:
+            logger.debug(f"Alert with hash {alert.hash} already exists, skipping")
+            return existing_alert
+            
+        # Create new alert
+        db_alert = WhaleAlert(**alert.model_dump())
+        db.add(db_alert)
+        
+        if commit:
+            await db.commit()
+            await db.refresh(db_alert)
+            logger.info(f"Created new whale alert with id {db_alert.id}")
+        
+        return WhaleAlertResponse.model_validate(db_alert, from_attributes=True)
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error creating whale alert: {e}")
+        await db.rollback()
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error creating whale alert: {e}")
+        await db.rollback()
+        raise
 
 
-def get_whale_alert(db: Session, alert_id: int) -> Optional[WhaleAlert]:
+async def get_whale_alert(
+    db: Session, 
+    alert_id: int,
+    lock: bool = False
+) -> Optional[WhaleAlertResponse]:
     """Get a whale alert by ID.
-
+    
     Args:
-        db: Database session.
-        alert_id: ID of the alert to retrieve.
-
+        db: Database session
+        alert_id: The ID of the alert to retrieve
+        lock: Whether to lock the row for update
+        
     Returns:
-        Optional[WhaleAlert]: The whale alert if found, None otherwise.
+        The whale alert if found, else None
     """
-    return db.query(WhaleAlert).filter(WhaleAlert.id == alert_id).first()
+    query = select(WhaleAlert).where(WhaleAlert.id == alert_id)
+    
+    if lock:
+        query = query.with_for_update()
+    
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+    
+    if not alert:
+        return None
+        
+    return WhaleAlertResponse.model_validate(alert, from_attributes=True)
 
 
-def get_whale_alert_by_hash(db: Session, hash_str: str) -> Optional[WhaleAlert]:
-    """Get a whale alert by transaction hash.
-
+async def get_whale_alert_by_hash(
+    db: Session, 
+    hash_str: str,
+    lock: bool = False
+) -> Optional[WhaleAlertResponse]:
+    """Get a whale alert by its transaction hash.
+    
     Args:
-        db: Database session.
-        hash_str: Transaction hash.
-
+        db: Database session
+        hash_str: The transaction hash to search for
+        lock: Whether to lock the row for update
+        
     Returns:
-        Optional[WhaleAlert]: The whale alert if found, None otherwise.
+        The whale alert if found, else None
     """
-    return db.query(WhaleAlert).filter(WhaleAlert.hash == hash_str).first()
+    query = select(WhaleAlert).where(WhaleAlert.hash == hash_str)
+    
+    if lock:
+        query = query.with_for_update()
+    
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+    
+    if not alert:
+        return None
+        
+    return WhaleAlertResponse.model_validate(alert, from_attributes=True)
 
 
-def get_whale_alerts(
+async def get_recent_whale_alerts(
+    db: Session, 
+    hours: int = 24,
+    min_amount_usd: Optional[float] = None,
+    limit: int = 100,
+    symbol: Optional[str] = None,
+    blockchain: Optional[str] = None
+) -> List[WhaleAlertResponse]:
+    """Get recent whale alerts from the last N hours with optional filters.
+    
+    This is a convenience wrapper around get_whale_alerts with sensible defaults
+    for getting recent alerts.
+    
+    Args:
+        db: Database session
+        hours: Number of hours to look back
+        min_amount_usd: Optional minimum USD value to filter alerts
+        limit: Maximum number of records to return
+        symbol: Optional cryptocurrency symbol to filter by
+        blockchain: Optional blockchain name to filter by
+        
+    Returns:
+        List of recent whale alerts matching the criteria
+    """
+    # Calculate the time threshold
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=hours)
+    
+    # Build the query using the more general get_whale_alerts function
+    return await get_whale_alerts(
+        db=db,
+        start_time=time_threshold,
+        min_amount_usd=min_amount_usd,
+        symbol=symbol,
+        blockchain=blockchain,
+        limit=min(limit, 1000),  # Enforce a reasonable limit
+        order_by="timestamp_desc"
+    )
+
+
+async def get_whale_alerts(
     db: Session,
     skip: int = 0,
     limit: int = 100,
-    start_time: Optional[datetime] = None,
-    end_time: Optional[datetime] = None,
     symbol: Optional[str] = None,
     min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
     min_amount_usd: Optional[float] = None,
-) -> List[WhaleAlert]:
-    """Get a list of whale alerts with optional filters.
-
+    max_amount_usd: Optional[float] = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    blockchain: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    from_address: Optional[str] = None,
+    to_address: Optional[str] = None,
+    order_by: str = "timestamp_desc",
+) -> List[WhaleAlertResponse]:
+    """Get a list of whale alerts with optional filtering and sorting.
+    
     Args:
-        db: Database session.
-        skip: Number of records to skip for pagination.
-        limit: Maximum number of records to return.
-        start_time: Filter alerts after this timestamp.
-        end_time: Filter alerts before this timestamp.
-        symbol: Filter by cryptocurrency symbol.
-        min_amount: Filter by minimum amount.
-        min_amount_usd: Filter by minimum amount in USD.
-
+        db: Database session
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        symbol: Filter by cryptocurrency symbol (case-insensitive)
+        min_amount: Filter by minimum amount in native token
+        max_amount: Filter by maximum amount in native token
+        min_amount_usd: Filter by minimum amount in USD
+        max_amount_usd: Filter by maximum amount in USD
+        start_time: Filter alerts after this timestamp
+        end_time: Filter alerts before this timestamp
+        blockchain: Filter by blockchain name (case-insensitive)
+        transaction_type: Filter by transaction type (case-insensitive)
+        from_address: Filter by source address (case-insensitive)
+        to_address: Filter by destination address (case-insensitive)
+        order_by: Field and direction to order by (e.g., 'timestamp_desc', 'amount_asc')
+        
     Returns:
-        List[WhaleAlert]: List of whale alerts matching the criteria.
+        List of whale alerts matching the criteria
     """
-    query = db.query(WhaleAlert)
-
-    if start_time:
-        query = query.filter(WhaleAlert.timestamp >= start_time)
-    if end_time:
-        query = query.filter(WhaleAlert.timestamp <= end_time)
+    # Build the base query
+    query = select(WhaleAlert)
+    
+    # Apply filters
+    conditions = []
+    
     if symbol:
-        query = query.filter(WhaleAlert.symbol == symbol.upper())
+        conditions.append(WhaleAlert.symbol.ilike(f"%{symbol}%"))
     if min_amount is not None:
-        query = query.filter(WhaleAlert.amount >= min_amount)
+        conditions.append(WhaleAlert.amount >= min_amount)
+    if max_amount is not None:
+        conditions.append(WhaleAlert.amount <= max_amount)
     if min_amount_usd is not None:
-        query = query.filter(WhaleAlert.amount_usd >= min_amount_usd)
+        conditions.append(WhaleAlert.amount_usd >= min_amount_usd)
+    if max_amount_usd is not None:
+        conditions.append(WhaleAlert.amount_usd <= max_amount_usd)
+    if start_time:
+        conditions.append(WhaleAlert.timestamp >= start_time)
+    if end_time:
+        conditions.append(WhaleAlert.timestamp <= end_time)
+    if blockchain:
+        conditions.append(WhaleAlert.blockchain.ilike(f"%{blockchain}%"))
+    if transaction_type:
+        conditions.append(WhaleAlert.transaction_type.ilike(f"%{transaction_type}%"))
+    if from_address:
+        conditions.append(WhaleAlert.from_address.ilike(f"%{from_address}%"))
+    if to_address:
+        conditions.append(WhaleAlert.to_address.ilike(f"%{to_address}%"))
+    
+    # Apply all conditions
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    # Apply ordering
+    order_field, order_dir = (order_by.split('_') + ['desc'])[:2]
+    order_field = order_field.lower()
+    order_dir = order_dir.upper()
+    
+    # Map order field to model attribute
+    order_mapping = {
+        'timestamp': WhaleAlert.timestamp,
+        'amount': WhaleAlert.amount,
+        'amount_usd': WhaleAlert.amount_usd,
+    }
+    
+    order_field = order_mapping.get(order_field, WhaleAlert.timestamp)
+    
+    if order_dir == 'ASC':
+        query = query.order_by(order_field.asc())
+    else:
+        query = query.order_by(order_field.desc())
+    
+    # Apply pagination
+    query = query.offset(skip).limit(limit)
+    
+    # Execute query
+    try:
+        result = await db.execute(query)
+        alerts = result.scalars().all()
+        
+        # Convert to Pydantic models
+        return [WhaleAlertResponse.model_validate(alert, from_attributes=True) 
+                for alert in alerts]
+                
+    except SQLAlchemyError as e:
+        logger.error(f"Database error fetching whale alerts: {e}")
+        raise
 
-    return query.offset(skip).limit(limit).all()
+
+async def get_whale_alerts_by_symbol(
+    db: Session, 
+    symbol: str, 
+    hours: Optional[int] = None,
+    min_amount_usd: Optional[float] = None,
+    skip: int = 0,
+    limit: int = 100,
+    exact_match: bool = False
+) -> List[WhaleAlertResponse]:
+    """Get whale alerts for a specific cryptocurrency symbol.
+    
+    Args:
+        db: Database session
+        symbol: Cryptocurrency symbol to filter by
+        hours: Optional number of hours to look back
+        min_amount_usd: Optional minimum USD value to filter alerts
+        skip: Number of records to skip for pagination
+        limit: Maximum number of records to return
+        exact_match: If True, match symbol exactly (case-insensitive)
+        
+    Returns:
+        List of whale alerts matching the criteria
+    """
+    # Build the time filter if hours is specified
+    start_time = None
+    if hours is not None:
+        start_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+    
+    # Build the symbol filter
+    symbol_filter = WhaleAlert.symbol.ilike(f"%{symbol}%")
+    if exact_match:
+        symbol_filter = func.lower(WhaleAlert.symbol) == func.lower(symbol)
+    
+    # Build the base query
+    query = (
+        select(WhaleAlert)
+        .where(symbol_filter)
+        .order_by(WhaleAlert.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    # Add time filter if specified
+    if start_time:
+        query = query.where(WhaleAlert.timestamp >= start_time)
+    
+    # Add amount filter if specified
+    if min_amount_usd is not None:
+        query = query.where(WhaleAlert.amount_usd >= min_amount_usd)
+    
+    # Execute the query
+    try:
+        result = await db.execute(query)
+        alerts = result.scalars().all()
+        
+        return [WhaleAlertResponse.model_validate(alert, from_attributes=True) 
+                for alert in alerts]
+                
+    except SQLAlchemyError as e:
+        logger.error(f"Database error fetching alerts for symbol {symbol}: {e}")
+        raise
+
+
+async def update_whale_alert(
+    db: Session,
+    alert_id: int,
+    alert_update: WhaleAlertUpdate,
+) -> Optional[WhaleAlertResponse]:
+    """Update a whale alert.
+    
+    Args:
+        db: Database session
+        alert_id: ID of the alert to update
+        alert_update: Fields to update
+        
+    Returns:
+        The updated whale alert if found, else None
+    """
+    try:
+        # Get the existing alert with a lock
+        result = await db.execute(
+            select(WhaleAlert)
+            .where(WhaleAlert.id == alert_id)
+            .with_for_update()
+        )
+        db_alert = result.scalar_one_or_none()
+        
+        if not db_alert:
+            return None
+        
+        # Update fields from the update model
+        update_data = alert_update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_alert, field, value)
+        
+        db_alert.updated_at = datetime.now(timezone.utc)
+        
+        await db.commit()
+        await db.refresh(db_alert)
+        
+        return WhaleAlertResponse.model_validate(db_alert, from_attributes=True)
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error updating alert {alert_id}: {e}")
+        await db.rollback()
+        raise
+
+
+async def delete_whale_alert(
+    db: Session,
+    alert_id: int,
+) -> bool:
+    """Delete a whale alert by ID.
+    
+    Args:
+        db: Database session
+        alert_id: ID of the alert to delete
+        
+    Returns:
+        True if the alert was deleted, False if not found
+    """
+    try:
+        result = await db.execute(
+            delete(WhaleAlert)
+            .where(WhaleAlert.id == alert_id)
+            .returning(WhaleAlert.id)
+        )
+        
+        deleted = result.scalar_one_or_none() is not None
+        
+        if deleted:
+            await db.commit()
+            logger.info(f"Deleted whale alert with id {alert_id}")
+        else:
+            logger.warning(f"Attempted to delete non-existent alert with id {alert_id}")
+        
+        return deleted
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error deleting alert {alert_id}: {e}")
+        await db.rollback()
+        raise
+
+
+async def get_whale_alert_stats(
+    db: Session,
+    time_window_hours: int = 24,
+    group_by: str = "symbol",
+) -> List[Dict[str, Any]]:
+    """Get statistics about whale alerts in a time window.
+    
+    Args:
+        db: Database session
+        time_window_hours: Number of hours to look back
+        group_by: Field to group by (symbol, blockchain, or transaction_type)
+        
+    Returns:
+        List of dictionaries containing statistics
+    """
+    # Validate group_by field
+    valid_group_by = {"symbol", "blockchain", "transaction_type"}
+    if group_by not in valid_group_by:
+        raise ValueError(f"group_by must be one of {valid_group_by}")
+    
+    # Calculate time threshold
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
+    
+    # Get the model field to group by
+    group_by_field = getattr(WhaleAlert, group_by)
+    
+    # Build the query
+    query = (
+        select(
+            group_by_field.label("group"),
+            func.count(WhaleAlert.id).label("count"),
+            func.sum(WhaleAlert.amount).label("total_amount"),
+            func.sum(WhaleAlert.amount_usd).label("total_amount_usd"),
+            func.avg(WhaleAlert.amount_usd).label("avg_amount_usd"),
+            func.max(WhaleAlert.amount_usd).label("max_amount_usd"),
+        )
+        .where(WhaleAlert.timestamp >= time_threshold)
+        .group_by(group_by_field)
+        .order_by(func.count(WhaleAlert.id).desc())
+    )
+    
+    # Execute the query
+    try:
+        result = await db.execute(query)
+        return [dict(row) for row in result.mappings()]
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error fetching alert stats: {e}")
+        raise

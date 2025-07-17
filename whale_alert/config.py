@@ -1,10 +1,11 @@
 """Configuration settings for the Whale Alert Telegram bot."""
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseSettings, PostgresDsn, validator
+from pydantic import PostgresDsn, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load environment variables from .env file if it exists
 env_path = Path(__file__).parent.parent / ".env"
@@ -32,23 +33,26 @@ class Settings(BaseSettings):
     SESSION_NAME: str = "whale_alert"
     LOG_LEVEL: str = "INFO"
 
-    class Config:
-        """Pydantic config."""
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore"
+    )
 
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-
-    @validator("TIMESCALEDB_URL", pre=True)
-    def ensure_timescaledb_scheme(cls, v: Optional[str]) -> str:
+    @field_validator("TIMESCALEDB_URL", mode='before')
+    @classmethod
+    def ensure_timescaledb_scheme(cls, v: Any) -> str:
         """Ensure the database URL has the postgresql scheme."""
         if v is None:
-            return ""
-        if not v.startswith(("postgresql://", "postgres://")):
-            if "://" not in v:
-                v = f"postgresql://{v}"
-            else:
-                raise ValueError("Database URL must start with 'postgresql://'")
+            raise ValueError("TIMESCALEDB_URL is required")
+            
+        if isinstance(v, str):
+            if not v.startswith(("postgresql://", "postgres://")):
+                if "://" not in v:
+                    v = f"postgresql://{v}"
+                else:
+                    raise ValueError("Database URL must start with 'postgresql://'")
         return v
 
 

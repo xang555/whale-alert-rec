@@ -13,6 +13,7 @@ from whale_alert.db.session import get_db
 from whale_alert.llm import LLMParser
 from whale_alert.schemas import WhaleAlertCreate
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,22 +71,20 @@ class WhaleAlertClient:
             logger.info(f"Processing message: {message.text[:100]}...")
             
             # Parse the whale alert message using LLM
-            alert_data = await self._parse_whale_alert(message)
-            if not alert_data:
+            alert = await self._parse_whale_alert(message)
+            if not alert:
                 logger.warning("Could not parse whale alert message")
                 return
 
             # Create a new whale alert in the database
             with get_db() as db:
                 # Check if alert already exists
-                existing_alert = get_whale_alert_by_hash(db, alert_data.hash)
+                existing_alert = get_whale_alert_by_hash(db, alert.hash)
                 if existing_alert:
-                    logger.info(f"Alert with hash {alert_data.hash} already exists")
+                    logger.info(f"Alert with hash {alert.hash} already exists")
                     return
 
-                # Convert to Pydantic model for database
-                alert_dict = alert_data.dict()
-                alert = WhaleAlertCreate(**alert_dict)
+                # Create the alert in the database
                 created_alert = create_whale_alert(db, alert)
                 logger.info(f"Created new whale alert: {created_alert.id}")
                 
@@ -149,14 +148,14 @@ class WhaleAlertClient:
             except Exception as e:
                 logger.error(f"Error handling message: {e}", exc_info=True)
 
-    async def _parse_whale_alert(self, message: Message) -> Optional[WhaleAlertData]:
+    async def _parse_whale_alert(self, message: Message) -> Optional[WhaleAlertCreate]:
         """Parse a Whale Alert message using LLM.
         
         Args:
             message: The Telegram message to parse
             
         Returns:
-            Optional[WhaleAlertData]: The parsed whale alert data, or None if parsing failed
+            Optional[WhaleAlertCreate]: The parsed whale alert data, or None if parsing failed
         """
         if not message.text or not self.llm_parser:
             return None
@@ -171,8 +170,10 @@ class WhaleAlertClient:
             # Use message date if timestamp is not provided by the LLM
             if not alert_data.timestamp and message.date:
                 alert_data.timestamp = message.date.isoformat()
-                
-            return alert_data
+            
+            # Convert WhaleAlertData to WhaleAlertCreate
+            alert_dict = alert_data.model_dump()
+            return WhaleAlertCreate(**alert_dict)
             
         except Exception as e:
             logger.error(f"Error in LLM parsing: {e}", exc_info=True)
