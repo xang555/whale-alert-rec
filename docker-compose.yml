@@ -10,7 +10,7 @@ services:
     stdin_open: true
     volumes:
       - ./.env:/app/.env
-      - telegram-session:/app/whale_alert/telegram/sessions
+      - ./sessions:/app/whale_alert/telegram/sessions
     networks:
       - whale-alert-net
     # Run in non-daemon mode to see logs and enter OTP
@@ -28,6 +28,3 @@ services:
 networks:
   whale-alert-net:
     external: true
-
-volumes:
-  telegram-session:  # Named volume for persisting Telegram session

@@ -1,7 +1,9 @@
 """Telegram client for the Whale Alert application."""
 
 import asyncio
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from telethon import TelegramClient, events
@@ -26,8 +28,12 @@ class WhaleAlertClient:
             max_queue_size: Maximum number of messages to queue before blocking
             num_workers: Number of worker tasks to process messages concurrently
         """
+        # Use absolute path for session file in the mounted volume
+        session_path = os.path.join('sessions', settings.SESSION_NAME)
+        os.makedirs('sessions', exist_ok=True)
+        
         self.client = TelegramClient(
-            settings.SESSION_NAME,
+            session_path,
             settings.API_ID,
             settings.API_HASH,
         )
