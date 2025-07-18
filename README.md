@@ -1,6 +1,6 @@
-# Whale Alert Telegram Bot
+# Whale Alert Record Agent
 
-A Python application that listens to Whale Alert messages on Telegram and stores them in TimescaleDB.
+A Python application that listens to Whale Alert messages on Telegram, processes them using LLM, and stores structured data in TimescaleDB for analysis.
 
 ## Features
 
