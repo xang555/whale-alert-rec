@@ -140,7 +140,7 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
@@ -148,7 +148,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Telegram](https://telegram.org/) for the messaging platform
 - [OpenAI](https://openai.com/) for the LLM processing
 - [TimescaleDB](https://www.timescale.com/) for time-series data storage
-
-## License
-
-MIT
