@@ -24,7 +24,7 @@ UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
 def create_whale_alert(
-    db: Session, alert: WhaleAlertBase, commit: bool = True, max_retries: int = 3
+    db: Session, alert: WhaleAlertBase, commit: bool = True, max_retries: int = 10
 ) -> WhaleAlertResponse:
     """Create a new whale alert in the database.
 
@@ -58,8 +58,9 @@ def create_whale_alert(
                            f" for original hash: {original_hash}")
                 raise ValueError("Maximum hash regeneration attempts exceeded")
                 
-            # Generate a new hash by appending a counter
-            new_hash = f"{original_hash}_{attempt + 1}"
+            # Generate a new hash by appending a counter and a timestamp to ensure uniqueness
+            timestamp_suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")[:8]
+            new_hash = f"{original_hash}{attempt + 1}{timestamp_suffix}"
             logger.debug(f"Hash collision detected for {current_alert.hash}, "
                        f"trying new hash: {new_hash}")
             
