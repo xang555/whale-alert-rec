@@ -57,10 +57,6 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app/whale_alert/. /app/whale_alert/
 
-# Only copy migration files if they exist
-COPY --from=builder /app/alembic.ini /app/alembic.ini
-RUN [ -d /app/alembic ] && cp -a /app/alembic/. /app/alembic/ || true
-
 # Set ownership and permissions
 RUN chown -R appuser:appuser /app
 
