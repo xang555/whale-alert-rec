@@ -98,9 +98,16 @@ class WhaleAlertClient:
 
             # Create a new whale alert in the database
             with get_db() as db:
-                # Create the alert in the database
-                created_alert = create_whale_alert(db, alert)
-                logger.info(f"Created new whale alert: {created_alert.id}")
+                try:
+                    # Create the alert in the database
+                    created_alert = create_whale_alert(db, alert)
+                    logger.info(f"Created new whale alert: {created_alert.id} with hash: {created_alert.hash}")
+                except ValueError as ve:
+                    if "Maximum hash regeneration attempts exceeded" in str(ve):
+                        logger.error(f"Hash collision error for alert: {alert}. Skipping this message.")
+                        return
+                    else:
+                        raise ve
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)

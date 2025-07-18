@@ -26,7 +26,7 @@ class WhaleAlertData(BaseModel):
     from_address: Optional[str] = Field(default=None, description="The source address of the transaction")
     to_address: Optional[str] = Field(default=None, description="The destination address of the transaction")
     transaction_type: str = Field(default="transfer", description="The type of transaction (e.g., transfer, deposit, withdrawal)")
-    hash: str = Field(..., description="The transaction hash or unique identifier")
+    hash: Optional[str] = Field(default=None, description="The transaction hash or unique identifier")
 
 
 class LLMParser:
@@ -94,7 +94,7 @@ class LLMParser:
                 - Source address (if available that is include Unknown, otherwise null)
                 - Destination address (if available that is include Unknown, otherwise null)
                 - Transaction type (transfer, deposit, withdrawal, etc.)
-                - Transaction hash (required, generate 32 characters hex string from transaction details here format: hex(timestamp+blockchain+symbol+amount+amount_usd+from_address+to_address+transaction_type))
+                - Transaction hash (if explicitly mentioned in the message, otherwise leave as null)
                 
                 Return the data in a valid JSON object that matches this schema:
                 {
@@ -106,7 +106,7 @@ class LLMParser:
                     "from_address": "string or null",
                     "to_address": "string or null",
                     "transaction_type": "string (default: 'transfer')",
-                    "hash": "string (required)"
+                    "hash": "string or null (only if explicitly mentioned in the message)"
                 }
                 """
                 
