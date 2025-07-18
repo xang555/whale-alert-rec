@@ -58,7 +58,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /app/whale_alert/. /app/whale_alert/
 
 # Create sessions directory and set permissions
-RUN mkdir -p /app/whale_alert/telegram/sessions && \
+RUN mkdir -p /app/sessions && \
     chown -R appuser:appuser /app
 
 # Switch to non-root user

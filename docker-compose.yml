@@ -10,11 +10,9 @@ services:
     stdin_open: true
     volumes:
       - ./.env:/app/.env
-      - ./sessions:/app/whale_alert/telegram/sessions
+      - ./sessions:/app/sessions
     networks:
       - whale-alert-net
-    # Run in non-daemon mode to see logs and enter OTP
-    command: ["bash", "-c", "python -m whale_alert || sleep infinity"]
 
     deploy:
       resources:
