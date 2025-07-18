@@ -6,13 +6,15 @@ services:
     env_file: .env
     environment:
       - TZ=UTC
-    tty: true  # Enable TTY for OTP input
-    stdin_open: true  # Keep STDIN open for interactive input
+    tty: true
+    stdin_open: true
     volumes:
       - ./.env:/app/.env
-      - telegram-session:/app/whale_alert/telegram/sessions  # Persist Telegram session
+      - telegram-session:/app/whale_alert/telegram/sessions
     networks:
       - whale-alert-net
+    # Run in non-daemon mode to see logs and enter OTP
+    command: ["bash", "-c", "python -m whale_alert || sleep infinity"]
 
     deploy:
       resources:
