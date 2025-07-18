@@ -124,8 +124,6 @@ LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 The application uses TimescaleDB (PostgreSQL) with the following main tables:
 
 - `whale_alerts`: Stores processed whale alert data
-- `raw_messages`: Stores raw messages for reference
-- `alembic_version`: Tracks database migrations
 
 ## 🔄 Deployment
 
