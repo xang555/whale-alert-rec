@@ -22,4 +22,4 @@ services:
 
 networks:
   whale-alert-net:
-    driver: bridge
+    external: true
