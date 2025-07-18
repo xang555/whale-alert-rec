@@ -33,12 +33,36 @@ A Python application that listens to Whale Alert messages on Telegram, processes
    ```
    Edit `.env` and fill in your API keys and configuration.
 
-3. Build and start the services:
+3. Build the Docker image:
+   ```bash
+   ./docker-build.sh
+   ```
+
+4. Step 1: Generate Telegram session
+   First, create a sessions directory and set the correct ownership:
+   ```bash
+   mkdir -p sessions
+   sudo chown -R 1000:1000 sessions  # Set owner to match the container user
+   ```
+   
+   Then run the session generation:
+   ```bash
+   docker run --rm -it \
+     --name whale-alert-session \
+     -e TZ=UTC \
+     -v "$(pwd)/.env:/app/.env" \
+     -v "$(pwd)/sessions:/app/sessions" \
+     --network whale-alert-net \
+     whale-alert:latest \
+     python generate_tg_session.py
+   ```
+
+5. Step 2: Start the application with Docker Compose:
    ```bash
    docker-compose up -d
    ```
 
-4. View logs:
+6. View logs:
    ```bash
    docker-compose logs -f
    ```
