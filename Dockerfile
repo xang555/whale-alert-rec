@@ -57,8 +57,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app/whale_alert/. /app/whale_alert/
 
-# Set ownership and permissions
-RUN chown -R appuser:appuser /app
+# Create sessions directory and set permissions
+RUN mkdir -p /app/whale_alert/telegram/sessions && \
+    chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser

@@ -6,8 +6,11 @@ services:
     env_file: .env
     environment:
       - TZ=UTC
+    tty: true  # Enable TTY for OTP input
+    stdin_open: true  # Keep STDIN open for interactive input
     volumes:
       - ./.env:/app/.env
+      - telegram-session:/app/whale_alert/telegram/sessions  # Persist Telegram session
     networks:
       - whale-alert-net
 
@@ -23,3 +26,6 @@ services:
 networks:
   whale-alert-net:
     external: true
+
+volumes:
+  telegram-session:  # Named volume for persisting Telegram session
