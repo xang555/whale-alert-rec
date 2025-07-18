@@ -5,13 +5,17 @@ FROM python:3.11-slim as builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    UV_SYSTEM_PYTHON=1
+    UV_SYSTEM_PYTHON=1 \
+    PATH="/root/.cargo/bin:${PATH}"
 
 # Install system dependencies and uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    && curl -sSf https://astral.sh/uv/install.sh | sh \
+    && curl -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . "$HOME/.cargo/env" \
+    && pip install --no-cache-dir uv \
+    && uv pip install --system pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
