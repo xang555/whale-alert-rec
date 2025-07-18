@@ -56,6 +56,7 @@ WORKDIR /app
 # Copy from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app/whale_alert/. /app/whale_alert/
+COPY --from=builder /app/generate_tg_session.py /app/generate_tg_session.py
 
 # Create sessions directory and set permissions
 RUN mkdir -p /app/sessions && \
