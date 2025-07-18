@@ -226,7 +226,7 @@ class WhaleAlertClient:
             # Connect using the existing session
             await self.client.connect()
             if not await self.client.is_user_authorized():
-                await self.client.start()
+                await self.client.start(phone=settings.PHONE_NUMBER)
 
             logger.info("Telegram client started")
 
