@@ -41,14 +41,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-# Install runtime dependencies
+# Add build arguments for UID and GID with defaults
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+# Install runtime dependencies and create user with specified UID/GID
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user
-RUN addgroup --system appuser && \
-    adduser --system --no-create-home --ingroup appuser appuser
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g ${USER_GID} appuser \
+    && useradd -u ${USER_UID} -g ${USER_GID} -s /bin/sh -m appuser
 
 # Set working directory
 WORKDIR /app
@@ -58,12 +60,13 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /app/whale_alert/. /app/whale_alert/
 COPY --from=builder /app/generate_tg_session.py /app/generate_tg_session.py
 
-# Create sessions directory and set permissions
-RUN mkdir -p /app/sessions && \
-    chown -R appuser:appuser /app
+# Create sessions directory and set permissions with correct ownership
+RUN mkdir -p /app/sessions \
+    && chown -R ${USER_UID}:${USER_GID} /app \
+    && chmod -R 755 /app
 
 # Switch to non-root user
-USER appuser
+USER ${USER_UID}
 
 # Command to run the application
 CMD ["python", "-m", "whale_alert"]
