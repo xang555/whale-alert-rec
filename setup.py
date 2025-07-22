@@ -47,6 +47,7 @@ setup(
     entry_points={
         "console_scripts": [
             "whale-alert=whale_alert.__main__:main",
+            "whale-alert-api=api.__main__:main",
         ],
     },
 )
