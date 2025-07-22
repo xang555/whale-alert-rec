@@ -13,6 +13,22 @@ services:
       - ./sessions:/app/sessions
     networks:
       - whale-alert-net
+    command: ["python", "-m", "whale_alert"]
+
+  api:
+    image: whale-alert:latest
+    container_name: whale-alert-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=UTC
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./.env:/app/.env
+    networks:
+      - whale-alert-net
+    command: ["python", "-m", "api"]
 
     deploy:
       resources:
